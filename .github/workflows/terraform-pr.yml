@@ -33,7 +33,7 @@ jobs:
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: terraform-pr-session
-        aws-region: ${{ vars.AWS_REGION || 'us-west-2' }}
+        aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
     
     - name: Get Vault Token via OIDC
       id: vault-auth

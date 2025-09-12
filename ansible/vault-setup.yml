@@ -43,6 +43,22 @@
         - /etc/vault/tls
         - /var/log/vault
         
+    - name: Set proper permissions for audit log directory
+      file:
+        path: /var/log/vault
+        state: directory
+        owner: vault
+        group: vault
+        mode: '0750'  # More restrictive for audit logs
+        
+    - name: Create audit log file with proper permissions
+      file:
+        path: /var/log/vault/audit.log
+        state: touch
+        owner: vault
+        group: vault
+        mode: '0640'  # Read-write for vault, read for group
+        
     - name: Download and install Vault binary
       block:
         - name: Download Vault

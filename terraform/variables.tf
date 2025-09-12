@@ -166,6 +166,18 @@ variable "store_ssh_key_in_ssm" {
 }
 
 # =============================================================================
+# AUDIT CONFIGURATION
+# =============================================================================
+
+# Enable stdout audit logging in addition to file audit
+# Security: Stdout audit provides immediate visibility but increases log volume
+variable "enable_stdout_audit" {
+  description = "Enable stdout audit device for immediate log visibility (increases log volume)"
+  type        = bool
+  default     = false
+}
+
+# =============================================================================
 # RESOURCE TAGGING
 # =============================================================================
 

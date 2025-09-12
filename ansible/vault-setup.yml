@@ -5,6 +5,9 @@
   vars:
     vault_version_var: "{{ vault_version | default('1.15.6') }}"
     vault_domain_var: "{{ vault_domain | default('vault.example.com') }}"
+    # Support both JWT and root token authentication
+    use_jwt_auth: "{{ vault_use_jwt_auth | default(false) }}"
+    vault_jwt_role: "{{ vault_jwt_role | default('tf-github-actions-role-apply-dev') }}"
     vault_root_token_var: "{{ vault_root_token | default('vault-dev-root-token') }}"
     
   tasks:
@@ -217,6 +220,50 @@
             
       when: certbot_result.rc == 0
       
+    - name: Wait for Vault to be ready
+      uri:
+        url: "http://127.0.0.1:8200/v1/sys/health"
+        method: GET
+        status_code: [200, 429]  # 200=unsealed, 429=sealed but ok
+      retries: 30
+      delay: 2
+      register: vault_health_check
+      
+    - name: Configure audit logging via API (when using JWT auth)
+      block:
+        - name: Authenticate with Vault using JWT
+          uri:
+            url: "http://127.0.0.1:8200/v1/auth/jwt/login/{{ vault_jwt_role }}"
+            method: POST
+            body_format: json
+            body:
+              jwt: "{{ lookup('env', 'GITHUB_TOKEN') | default(lookup('env', 'ACTIONS_ID_TOKEN')) }}"
+            status_code: 200
+          register: vault_jwt_auth_result
+          when: use_jwt_auth and lookup('env', 'GITHUB_TOKEN', default=lookup('env', 'ACTIONS_ID_TOKEN', default='')) != ''
+          
+        - name: Enable audit logging using JWT token
+          uri:
+            url: "http://127.0.0.1:8200/v1/sys/audit/file_audit_ansible"
+            method: PUT
+            headers:
+              X-Vault-Token: "{{ vault_jwt_auth_result.json.auth.client_token }}"
+            body_format: json
+            body:
+              type: "file"
+              options:
+                file_path: "/var/log/vault/audit.log"
+                format: "json"
+                prefix: "vault_audit_ansible"
+            status_code: [200, 204]
+          when: use_jwt_auth and vault_jwt_auth_result is defined and vault_jwt_auth_result.json is defined
+          
+      rescue:
+        - name: JWT authentication failed, continuing with existing setup
+          debug:
+            msg: "JWT authentication failed or not configured, audit logging will be handled by Terraform"
+      when: use_jwt_auth
+
     - name: Display setup results
       debug:
         msg: |
@@ -231,6 +278,11 @@
           ⚠️  Certificate failed, using HTTP fallback
           🔗 HTTP URL: http://{{ vault_domain_var }}:8200
           {% endif %}
+          {% if use_jwt_auth %}
+          🔐 Authentication: JWT (GitHub Actions OIDC)
+          🎭 JWT Role: {{ vault_jwt_role }}
+          {% else %}
           🔑 Root Token: {{ vault_root_token_var }}
+          {% endif %}
           🔧 SSH: ssh -i ../vault-ssh-key.pem ubuntu@{{ ansible_host }}
           ===================================

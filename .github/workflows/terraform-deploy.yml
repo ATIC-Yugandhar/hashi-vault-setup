@@ -101,7 +101,9 @@ jobs:
         
         # echo "✅ DEBUG: Vault token obtained (length: ${#VAULT_TOKEN})"
         echo "vault-token=${VAULT_TOKEN}" >> $GITHUB_OUTPUT
+        echo "github-token=${GITHUB_TOKEN}" >> $GITHUB_OUTPUT
         echo "::add-mask::${VAULT_TOKEN}"
+        echo "::add-mask::${GITHUB_TOKEN}"
         echo "✅ Vault OIDC authentication completed successfully"
     
     - name: Terraform Init
@@ -165,6 +167,11 @@ jobs:
         VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
         VAULT_ADDR: ${{ vars.VAULT_ADDR }}
         VAULT_SKIP_VERIFY: "true"
+        # GitHub Actions environment variables for JWT auth
+        GITHUB_ACTIONS: "true"
+        ACTIONS_ID_TOKEN: ${{ steps.vault-auth.outputs.github-token }}
+        GITHUB_TOKEN: ${{ steps.vault-auth.outputs.github-token }}
+        # Terraform variables
         TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
         TF_VAR_vault_domain: ${{ vars.VAULT_DOMAIN }}
         TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}

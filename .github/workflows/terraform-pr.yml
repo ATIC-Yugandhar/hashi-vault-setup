@@ -1,0 +1,207 @@
+name: Terraform PR Check
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**.tf'
+      - '**.tfvars'
+      - '.github/workflows/terraform-*.yml'
+
+permissions:
+  id-token: write   # Required for OIDC token
+  contents: read    # Required to checkout code
+  pull-requests: write  # Required to comment on PRs
+
+jobs:
+  terraform-check:
+    name: Terraform Check
+    runs-on: ubuntu-latest
+    environment: tf-plan-${{ vars.ENVIRONMENT || 'dev' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.0
+    
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: terraform-pr-session
+        aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+    
+    - name: Get Vault Token via OIDC
+      id: vault-auth
+      run: |
+        # echo "🔍 DEBUG: Starting Vault OIDC authentication process"
+        # echo "📋 DEBUG: Environment variables:"
+        # echo "  - ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+SET}"
+        # echo "  - ACTIONS_ID_TOKEN_REQUEST_URL: $ACTIONS_ID_TOKEN_REQUEST_URL"
+        # echo "  - Repository Owner: ${{ github.repository_owner }}"
+        # echo "  - Vault Address: ${{ vars.VAULT_ADDR }}"
+        
+        # Get GitHub OIDC token
+        # echo "🎫 DEBUG: Requesting GitHub OIDC token..."
+        AUDIENCE_URL="https://github.com/${{ github.repository_owner }}"
+        # echo "📍 DEBUG: Using audience: $AUDIENCE_URL"
+        
+        GITHUB_TOKEN_RESPONSE=$(curl -s -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE_URL}")
+        
+        # echo "📋 DEBUG: GitHub token response received (length: ${#GITHUB_TOKEN_RESPONSE})"
+        
+        GITHUB_TOKEN=$(echo "$GITHUB_TOKEN_RESPONSE" | jq -r .value)
+        
+        if [ "$GITHUB_TOKEN" = "null" ] || [ -z "$GITHUB_TOKEN" ]; then
+          echo "❌ ERROR: Failed to get GitHub OIDC token"
+          echo "Response: $GITHUB_TOKEN_RESPONSE"
+          exit 1
+        fi
+        
+        # echo "✅ DEBUG: GitHub OIDC token obtained (length: ${#GITHUB_TOKEN})"
+        echo "::add-mask::${GITHUB_TOKEN}"
+        
+        # Debug: Decode JWT header and payload (without signature)
+        # JWT_HEADER=$(echo "$GITHUB_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | jq . || echo "Failed to decode header")
+        # JWT_PAYLOAD=$(echo "$GITHUB_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq . || echo "Failed to decode payload")
+        # 
+        # echo "🔍 DEBUG: JWT Token Info:"
+        # echo "  Header: $JWT_HEADER"
+        # echo "  Payload: $JWT_PAYLOAD"
+        
+        # Exchange for Vault token using plan role
+        # echo "🏛️ DEBUG: Exchanging GitHub token for Vault token..."
+        VAULT_URL="${{ vars.VAULT_ADDR }}/v1/auth/jwt/login"
+        ENV_NAME=${{ vars.ENVIRONMENT || 'dev' }}
+        ROLE_NAME="tf-github-actions-role-plan-${ENV_NAME}"
+        # echo "📍 DEBUG: Environment: $ENV_NAME"
+        # echo "📍 DEBUG: Vault URL: $VAULT_URL"
+        # echo "📍 DEBUG: Role: $ROLE_NAME"
+        
+        VAULT_RESPONSE=$(curl -s -X POST \
+          -H "Content-Type: application/json" \
+          -d "{\"jwt\":\"${GITHUB_TOKEN}\",\"role\":\"${ROLE_NAME}\"}" \
+          "$VAULT_URL")
+        
+        # echo "📋 DEBUG: Vault response received (length: ${#VAULT_RESPONSE})"
+        # echo "🔍 DEBUG: Vault response: $VAULT_RESPONSE"
+        
+        VAULT_TOKEN=$(echo "$VAULT_RESPONSE" | jq -r .auth.client_token)
+        
+        if [ "$VAULT_TOKEN" = "null" ] || [ -z "$VAULT_TOKEN" ]; then
+          echo "❌ ERROR: Failed to get Vault token"
+          echo "Vault response: $VAULT_RESPONSE"
+          exit 1
+        fi
+        
+        # echo "✅ DEBUG: Vault token obtained (length: ${#VAULT_TOKEN})"
+        echo "vault-token=${VAULT_TOKEN}" >> $GITHUB_OUTPUT
+        echo "::add-mask::${VAULT_TOKEN}"
+        echo "✅ Vault OIDC authentication completed successfully"
+    
+    - name: Terraform Format Check
+      run: |
+        cd terraform
+        terraform fmt -check -recursive
+        if [ $? -ne 0 ]; then
+          echo "❌ Terraform files are not properly formatted"
+          echo "Run 'terraform fmt -recursive' to fix formatting issues"
+          exit 1
+        else
+          echo "✅ All Terraform files are properly formatted"
+        fi
+    
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init
+      env:
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
+        VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        VAULT_SKIP_VERIFY: "true"  # For dev environment with self-signed certs
+    
+    - name: Terraform Validate
+      run: |
+        cd terraform
+        terraform validate
+        if [ $? -eq 0 ]; then
+          echo "✅ Terraform configuration is valid"
+        else
+          echo "❌ Terraform configuration validation failed"
+          exit 1
+        fi
+      env:
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
+        VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        VAULT_SKIP_VERIFY: "true"
+    
+    - name: Terraform Plan
+      id: plan
+      run: |
+        cd terraform
+        terraform plan -no-color -out=tfplan
+        terraform show -no-color tfplan > plan-output.txt
+      env:
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
+        VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        VAULT_SKIP_VERIFY: "true"
+        TF_VAR_vault_domain: ${{ vars.VAULT_DOMAIN }}
+        TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
+        TF_VAR_my_ip: ${{ secrets.MY_IP }}
+        TF_VAR_github_organization: ${{ github.repository_owner }}
+        TF_VAR_github_repository: ${{ github.event.repository.name }}
+        TF_VAR_vault_server_url: ${{ vars.VAULT_ADDR }}
+      continue-on-error: true
+    
+    - name: Comment PR with Plan
+      uses: actions/github-script@v7
+      if: github.event_name == 'pull_request'
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let planOutput = '';
+          try {
+            planOutput = fs.readFileSync('terraform/plan-output.txt', 'utf8');
+          } catch (error) {
+            planOutput = 'Unable to read plan output';
+          }
+          
+          const output = `#### Terraform Plan 📖
+          
+          <details><summary>Show Plan</summary>
+          
+          \`\`\`hcl
+          ${planOutput}
+          \`\`\`
+          
+          </details>
+          
+          *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          });
+    
+    - name: Check Plan Status
+      if: steps.plan.outcome == 'failure'
+      run: |
+        echo "❌ Terraform plan failed"
+        exit 1
+    
+    - name: Summary
+      run: |
+        echo "## 🏗️ Terraform PR Check Summary" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Format Check**: Passed" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Validation**: Passed" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Plan**: Generated successfully" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "The plan has been added as a comment to this PR." >> $GITHUB_STEP_SUMMARY

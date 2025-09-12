@@ -1,0 +1,206 @@
+name: Terraform Deploy
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**.tf'
+      - '**.tfvars'
+      - '.github/workflows/terraform-*.yml'
+  workflow_dispatch:  # Allow manual triggers
+
+permissions:
+  id-token: write   # Required for OIDC token
+  contents: read    # Required to checkout code
+
+jobs:
+  terraform-deploy:
+    name: Terraform Deploy
+    runs-on: ubuntu-latest
+    environment: tf-apply-${{ vars.ENVIRONMENT || 'dev' }}  # Use environment protection rules
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.0
+    
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: terraform-deploy-session
+        aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+    
+    - name: Get Vault Token via OIDC
+      id: vault-auth
+      run: |
+        # echo "🔍 DEBUG: Starting Vault OIDC authentication process (APPLY)"
+        # echo "📋 DEBUG: Environment variables:"
+        # echo "  - ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+SET}"
+        # echo "  - ACTIONS_ID_TOKEN_REQUEST_URL: $ACTIONS_ID_TOKEN_REQUEST_URL"
+        # echo "  - Repository Owner: ${{ github.repository_owner }}"
+        # echo "  - Vault Address: ${{ vars.VAULT_ADDR }}"
+        
+        # Get GitHub OIDC token
+        # echo "🎫 DEBUG: Requesting GitHub OIDC token..."
+        AUDIENCE_URL="https://github.com/${{ github.repository_owner }}"
+        # echo "📍 DEBUG: Using audience: $AUDIENCE_URL"
+        
+        GITHUB_TOKEN_RESPONSE=$(curl -s -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE_URL}")
+        
+        # echo "📋 DEBUG: GitHub token response received (length: ${#GITHUB_TOKEN_RESPONSE})"
+        
+        GITHUB_TOKEN=$(echo "$GITHUB_TOKEN_RESPONSE" | jq -r .value)
+        
+        if [ "$GITHUB_TOKEN" = "null" ] || [ -z "$GITHUB_TOKEN" ]; then
+          echo "❌ ERROR: Failed to get GitHub OIDC token"
+          echo "Response: $GITHUB_TOKEN_RESPONSE"
+          exit 1
+        fi
+        
+        # echo "✅ DEBUG: GitHub OIDC token obtained (length: ${#GITHUB_TOKEN})"
+        echo "::add-mask::${GITHUB_TOKEN}"
+        
+        # Debug: Decode JWT header and payload (without signature)
+        # JWT_HEADER=$(echo "$GITHUB_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | jq . || echo "Failed to decode header")
+        # JWT_PAYLOAD=$(echo "$GITHUB_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq . || echo "Failed to decode payload")
+        # 
+        # echo "🔍 DEBUG: JWT Token Info:"
+        # echo "  Header: $JWT_HEADER"
+        # echo "  Payload: $JWT_PAYLOAD"
+        
+        # Exchange for Vault token using apply role
+        # echo "🏛️ DEBUG: Exchanging GitHub token for Vault token..."
+        VAULT_URL="${{ vars.VAULT_ADDR }}/v1/auth/jwt/login"
+        ENV_NAME=${{ vars.ENVIRONMENT || 'dev' }}
+        ROLE_NAME="tf-github-actions-role-apply-${ENV_NAME}"
+        # echo "📍 DEBUG: Environment: $ENV_NAME"
+        # echo "📍 DEBUG: Vault URL: $VAULT_URL"
+        # echo "📍 DEBUG: Role: $ROLE_NAME"
+        
+        VAULT_RESPONSE=$(curl -s -X POST \
+          -H "Content-Type: application/json" \
+          -d "{\"jwt\":\"${GITHUB_TOKEN}\",\"role\":\"${ROLE_NAME}\"}" \
+          "$VAULT_URL")
+        
+        # echo "📋 DEBUG: Vault response received (length: ${#VAULT_RESPONSE})"
+        # echo "🔍 DEBUG: Vault response: $VAULT_RESPONSE"
+        
+        VAULT_TOKEN=$(echo "$VAULT_RESPONSE" | jq -r .auth.client_token)
+        
+        if [ "$VAULT_TOKEN" = "null" ] || [ -z "$VAULT_TOKEN" ]; then
+          echo "❌ ERROR: Failed to get Vault token"
+          echo "Vault response: $VAULT_RESPONSE"
+          exit 1
+        fi
+        
+        # echo "✅ DEBUG: Vault token obtained (length: ${#VAULT_TOKEN})"
+        echo "vault-token=${VAULT_TOKEN}" >> $GITHUB_OUTPUT
+        echo "::add-mask::${VAULT_TOKEN}"
+        echo "✅ Vault OIDC authentication completed successfully"
+    
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init
+      env:
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
+        VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        VAULT_SKIP_VERIFY: "true"  # For dev environment with self-signed certs
+    
+    - name: Terraform Plan
+      id: plan
+      run: |
+        cd terraform
+        echo "## 📋 Terraform Plan" >> $GITHUB_STEP_SUMMARY
+        terraform plan -no-color -out=tfplan
+        terraform show -no-color tfplan > plan-output.txt
+        
+        # Add plan summary to job summary
+        echo '<details><summary>📖 View Terraform Plan</summary>' >> $GITHUB_STEP_SUMMARY
+        echo '' >> $GITHUB_STEP_SUMMARY
+        echo '```hcl' >> $GITHUB_STEP_SUMMARY
+        head -50 plan-output.txt >> $GITHUB_STEP_SUMMARY
+        if [ $(wc -l < plan-output.txt) -gt 50 ]; then
+          echo '...' >> $GITHUB_STEP_SUMMARY
+          echo '(Plan truncated - see full output in logs)' >> $GITHUB_STEP_SUMMARY
+        fi
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo '</details>' >> $GITHUB_STEP_SUMMARY
+      env:
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
+        VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        VAULT_SKIP_VERIFY: "true"
+        TF_VAR_vault_domain: ${{ vars.VAULT_DOMAIN }}
+        TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
+        TF_VAR_my_ip: ${{ secrets.MY_IP }}
+        TF_VAR_github_organization: ${{ github.repository_owner }}
+        TF_VAR_github_repository: ${{ github.event.repository.name }}
+        TF_VAR_vault_server_url: ${{ vars.VAULT_ADDR }}
+    
+    - name: Terraform Apply
+      id: apply
+      run: |
+        cd terraform
+        echo "## 🚀 Terraform Apply" >> $GITHUB_STEP_SUMMARY
+        echo "Applying Terraform changes..." >> $GITHUB_STEP_SUMMARY
+        
+        terraform apply -auto-approve tfplan
+        
+        if [ $? -eq 0 ]; then
+          echo "✅ **Apply Status**: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          echo "Infrastructure has been successfully updated!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Apply Status**: FAILED" >> $GITHUB_STEP_SUMMARY
+          echo "Infrastructure deployment failed. Check logs for details." >> $GITHUB_STEP_SUMMARY
+          exit 1
+        fi
+      env:
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
+        VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        VAULT_SKIP_VERIFY: "true"
+        TF_VAR_vault_domain: ${{ vars.VAULT_DOMAIN }}
+        TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
+        TF_VAR_my_ip: ${{ secrets.MY_IP }}
+        TF_VAR_github_organization: ${{ github.repository_owner }}
+        TF_VAR_github_repository: ${{ github.event.repository.name }}
+        TF_VAR_vault_server_url: ${{ vars.VAULT_ADDR }}
+    
+    - name: Output Important Information
+      run: |
+        echo "## 📊 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "**Repository**: ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Workflow**: ${{ github.workflow }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Show Terraform outputs if any
+        cd terraform
+        if terraform output > /dev/null 2>&1; then
+          echo "### 🔧 Terraform Outputs" >> $GITHUB_STEP_SUMMARY
+          terraform output >> $GITHUB_STEP_SUMMARY
+        fi
+      env:
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
+        VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        VAULT_SKIP_VERIFY: "true"
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        # Clean up sensitive files
+        rm -f tfplan plan-output.txt
+        
+        # Revoke Vault token if possible
+        if [ -n "${{ steps.vault-auth.outputs.vault-token }}" ]; then
+          curl -s -X POST \
+            -H "X-Vault-Token: ${{ steps.vault-auth.outputs.vault-token }}" \
+            "${{ vars.VAULT_ADDR }}/v1/auth/token/revoke-self" || true
+        fi

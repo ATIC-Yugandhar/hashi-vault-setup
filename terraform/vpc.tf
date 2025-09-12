@@ -73,13 +73,14 @@ resource "aws_security_group" "vault_sg" {
     cidr_blocks = [var.my_ip]
   }
 
-  # HTTPS access from your IP only (for production Vault)
+  # HTTPS access - TEMPORARILY OPEN FOR TESTING
+  # TODO: Restrict back to specific IPs after JWT auth testing is complete
   ingress {
-    description = "HTTPS"
+    description = "HTTPS - Open for testing"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
+    cidr_blocks = ["0.0.0.0/0"] # Open to internet - FOR TESTING ONLY
   }
 
   # HTTP access for Let's Encrypt certificate validation
@@ -89,7 +90,7 @@ resource "aws_security_group" "vault_sg" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # Let's Encrypt needs to access from anywhere
+    cidr_blocks = ["0.0.0.0/0"] # Let's Encrypt needs to access from anywhere
   }
 
   # All outbound traffic

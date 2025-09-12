@@ -118,6 +118,13 @@ SETUP_COMPLETE.md
 ansible/inventory.ini
 
 # =============================================================================
+# GITHUB ACTIONS SECRETS REFERENCE (CRITICAL - Contains sensitive data)
+# =============================================================================
+github-secrets-reference.md
+*secrets-reference*
+github-config-local*
+
+# =============================================================================
 # DOCUMENTATION BUILDS (if using doc generators)
 # =============================================================================
 docs/_build/

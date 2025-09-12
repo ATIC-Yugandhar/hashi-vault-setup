@@ -38,7 +38,7 @@ variable "github_repository" {
 variable "aws_region" {
   description = "AWS region to deploy resources in (affects latency and compliance)"
   type        = string
-  default     = "us-west-2"
+  default     = "us-east-1"
 
   validation {
     condition     = can(regex("^[a-z]{2}-[a-z]+-[0-9]+$", var.aws_region))

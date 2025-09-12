@@ -136,6 +136,7 @@ jobs:
         VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
         VAULT_ADDR: ${{ vars.VAULT_ADDR }}
         VAULT_SKIP_VERIFY: "true"
+        TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
         TF_VAR_vault_domain: ${{ vars.VAULT_DOMAIN }}
         TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
         TF_VAR_my_ip: ${{ secrets.MY_IP }}
@@ -164,6 +165,7 @@ jobs:
         VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
         VAULT_ADDR: ${{ vars.VAULT_ADDR }}
         VAULT_SKIP_VERIFY: "true"
+        TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
         TF_VAR_vault_domain: ${{ vars.VAULT_DOMAIN }}
         TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
         TF_VAR_my_ip: ${{ secrets.MY_IP }}

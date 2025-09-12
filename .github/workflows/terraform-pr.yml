@@ -1,0 +1,146 @@
+name: Terraform PR Check
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**.tf'
+      - '**.tfvars'
+      - '.github/workflows/terraform-*.yml'
+
+permissions:
+  id-token: write   # Required for OIDC token
+  contents: read    # Required to checkout code
+  pull-requests: write  # Required to comment on PRs
+
+jobs:
+  terraform-check:
+    name: Terraform Check
+    runs-on: ubuntu-latest
+    environment: tf-plan-dev
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.0
+    
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: terraform-pr-session
+        aws-region: ${{ vars.AWS_REGION || 'us-west-2' }}
+    
+    - name: Get Vault Token via OIDC
+      id: vault-auth
+      run: |
+        # Get GitHub OIDC token
+        GITHUB_TOKEN=$(curl -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://github.com/${{ github.repository_owner }}" | jq -r .value)
+        
+        # Exchange for Vault token using plan role
+        VAULT_TOKEN=$(curl -s -X POST \
+          -H "Content-Type: application/json" \
+          -d "{\"jwt\":\"${GITHUB_TOKEN}\",\"role\":\"tf-github-actions-role-plan\"}" \
+          "${{ vars.VAULT_ADDR }}/v1/auth/jwt/login" | jq -r .auth.client_token)
+        
+        echo "vault-token=${VAULT_TOKEN}" >> $GITHUB_OUTPUT
+        echo "::add-mask::${VAULT_TOKEN}"
+    
+    - name: Terraform Format Check
+      run: |
+        terraform fmt -check -recursive
+        if [ $? -ne 0 ]; then
+          echo "❌ Terraform files are not properly formatted"
+          echo "Run 'terraform fmt -recursive' to fix formatting issues"
+          exit 1
+        else
+          echo "✅ All Terraform files are properly formatted"
+        fi
+    
+    - name: Terraform Init
+      run: terraform init
+      env:
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
+        VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        VAULT_SKIP_VERIFY: "true"  # For dev environment with self-signed certs
+    
+    - name: Terraform Validate
+      run: |
+        terraform validate
+        if [ $? -eq 0 ]; then
+          echo "✅ Terraform configuration is valid"
+        else
+          echo "❌ Terraform configuration validation failed"
+          exit 1
+        fi
+      env:
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
+        VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        VAULT_SKIP_VERIFY: "true"
+    
+    - name: Terraform Plan
+      id: plan
+      run: |
+        terraform plan -no-color -out=tfplan
+        terraform show -no-color tfplan > plan-output.txt
+      env:
+        VAULT_TOKEN: ${{ steps.vault-auth.outputs.vault-token }}
+        VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+        VAULT_SKIP_VERIFY: "true"
+        TF_VAR_vault_domain: ${{ vars.VAULT_DOMAIN }}
+        TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
+        TF_VAR_my_ip: ${{ secrets.MY_IP }}
+      continue-on-error: true
+    
+    - name: Comment PR with Plan
+      uses: actions/github-script@v7
+      if: github.event_name == 'pull_request'
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let planOutput = '';
+          try {
+            planOutput = fs.readFileSync('plan-output.txt', 'utf8');
+          } catch (error) {
+            planOutput = 'Unable to read plan output';
+          }
+          
+          const output = `#### Terraform Plan 📖
+          
+          <details><summary>Show Plan</summary>
+          
+          \`\`\`hcl
+          ${planOutput}
+          \`\`\`
+          
+          </details>
+          
+          *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: output
+          });
+    
+    - name: Check Plan Status
+      if: steps.plan.outcome == 'failure'
+      run: |
+        echo "❌ Terraform plan failed"
+        exit 1
+    
+    - name: Summary
+      run: |
+        echo "## 🏗️ Terraform PR Check Summary" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Format Check**: Passed" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Validation**: Passed" >> $GITHUB_STEP_SUMMARY
+        echo "✅ **Plan**: Generated successfully" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "The plan has been added as a comment to this PR." >> $GITHUB_STEP_SUMMARY

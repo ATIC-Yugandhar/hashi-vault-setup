@@ -11,6 +11,28 @@
 # INFRASTRUCTURE CONFIGURATION
 # =============================================================================
 
+# Vault server URL
+variable "vault_server_url" {
+  description = "Vault server URL (e.g., https://vault.example.com:8200)"
+  type        = string
+}
+
+# =============================================================================
+# GITHUB CONFIGURATION
+# =============================================================================
+
+# GitHub organization name
+variable "github_organization" {
+  description = "GitHub organization name"
+  type        = string
+}
+
+# GitHub repository name
+variable "github_repository" {
+  description = "GitHub repository name"
+  type        = string
+}
+
 # AWS Region for resource deployment
 # Security: Choose region based on compliance and latency requirements
 variable "aws_region" {

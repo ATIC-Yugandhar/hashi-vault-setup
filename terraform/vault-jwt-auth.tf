@@ -10,7 +10,7 @@
 provider "vault" {
   address = var.vault_server_url
   token   = "vault-dev-root-token"
-  
+
   # Skip TLS verification for dev environment with self-signed certs
   skip_tls_verify = true
 }
@@ -45,39 +45,39 @@ EOT
 resource "vault_jwt_auth_backend_role" "github_actions" {
   for_each = toset([
     for combo in setproduct(local.environments, local.operations) :
-    "${combo[1]}-${combo[0]}"  # Creates: plan-dev, plan-prod, apply-dev, apply-prod
+    "${combo[1]}-${combo[0]}" # Creates: plan-dev, plan-prod, apply-dev, apply-prod
   ])
-  
-  backend         = vault_jwt_auth_backend.github_actions.path
-  role_name       = "tf-github-actions-role-${each.value}"
-  token_policies  = [vault_policy.github_actions.name]
-  
+
+  backend        = vault_jwt_auth_backend.github_actions.path
+  role_name      = "tf-github-actions-role-${each.value}"
+  token_policies = [vault_policy.github_actions.name]
+
   # Token configuration - 15 minute TTL
-  token_ttl     = 900  # 15 minutes
-  token_max_ttl = 900  # 15 minutes maximum
-  
+  token_ttl     = 900 # 15 minutes
+  token_max_ttl = 900 # 15 minutes maximum
+
   # JWT role configuration based on actual GitHub OIDC token structure
   user_claim = "actor"
   role_type  = "jwt"
-  
+
   # Bound audiences - must match the 'aud' claim in the JWT
   bound_audiences = [
     "https://github.com/${var.github_organization}"
   ]
-  
+
   # Bound claims - must match JWT claims exactly
   bound_claims_type = "string"
-  
+
   # Dynamic subject binding - matches the exact 'sub' claim pattern
   # Format: repo:ATIC-Yugandhar/hashi-vault-setup:environment:tf-plan-dev
   bound_subject = "repo:${var.github_organization}/${var.github_repository}:environment:tf-${each.value}"
-  
+
   # Additional claim mappings for audit and debugging
   claim_mappings = {
-    repository = "repository"
-    actor      = "actor"
-    workflow   = "workflow"
-    ref        = "ref"
+    repository  = "repository"
+    actor       = "actor"
+    workflow    = "workflow"
+    ref         = "ref"
     environment = "environment"
   }
 }

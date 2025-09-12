@@ -11,7 +11,7 @@ resource "null_resource" "ansible_provisioner" {
     instance_id           = aws_instance.vault.id
     instance_ip           = aws_instance.vault.public_ip
     vault_domain          = var.vault_domain
-    ansible_playbook_hash = filemd5("${path.module}/ansible/vault-setup.yml")
+    ansible_playbook_hash = filemd5("${path.module}/../ansible/vault-setup.yml")
   }
 
   # Wait for SSH to be ready before running Ansible
@@ -37,7 +37,7 @@ resource "null_resource" "ansible_provisioner" {
       echo "Domain: ${var.vault_domain}"
       
       # Run Ansible playbook with dynamic inventory
-      cd ${path.module}/ansible
+      cd ${path.module}/../ansible
       ansible-playbook -i dynamic_inventory.py vault-setup.yml
       
       echo "✅ Ansible provisioning completed successfully"

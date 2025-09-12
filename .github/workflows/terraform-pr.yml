@@ -38,18 +38,69 @@ jobs:
     - name: Get Vault Token via OIDC
       id: vault-auth
       run: |
+        echo "🔍 DEBUG: Starting Vault OIDC authentication process"
+        echo "📋 DEBUG: Environment variables:"
+        echo "  - ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+SET}"
+        echo "  - ACTIONS_ID_TOKEN_REQUEST_URL: $ACTIONS_ID_TOKEN_REQUEST_URL"
+        echo "  - Repository Owner: ${{ github.repository_owner }}"
+        echo "  - Vault Address: ${{ vars.VAULT_ADDR }}"
+        
         # Get GitHub OIDC token
-        GITHUB_TOKEN=$(curl -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://github.com/${{ github.repository_owner }}" | jq -r .value)
+        echo "🎫 DEBUG: Requesting GitHub OIDC token..."
+        AUDIENCE_URL="https://github.com/${{ github.repository_owner }}"
+        echo "📍 DEBUG: Using audience: $AUDIENCE_URL"
+        
+        GITHUB_TOKEN_RESPONSE=$(curl -s -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUDIENCE_URL}")
+        
+        echo "📋 DEBUG: GitHub token response received (length: ${#GITHUB_TOKEN_RESPONSE})"
+        
+        GITHUB_TOKEN=$(echo "$GITHUB_TOKEN_RESPONSE" | jq -r .value)
+        
+        if [ "$GITHUB_TOKEN" = "null" ] || [ -z "$GITHUB_TOKEN" ]; then
+          echo "❌ ERROR: Failed to get GitHub OIDC token"
+          echo "Response: $GITHUB_TOKEN_RESPONSE"
+          exit 1
+        fi
+        
+        echo "✅ DEBUG: GitHub OIDC token obtained (length: ${#GITHUB_TOKEN})"
+        echo "::add-mask::${GITHUB_TOKEN}"
+        
+        # Debug: Decode JWT header and payload (without signature)
+        JWT_HEADER=$(echo "$GITHUB_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | jq . || echo "Failed to decode header")
+        JWT_PAYLOAD=$(echo "$GITHUB_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq . || echo "Failed to decode payload")
+        
+        echo "🔍 DEBUG: JWT Token Info:"
+        echo "  Header: $JWT_HEADER"
+        echo "  Payload: $JWT_PAYLOAD"
         
         # Exchange for Vault token using plan role
-        VAULT_TOKEN=$(curl -s -X POST \
-          -H "Content-Type: application/json" \
-          -d "{\"jwt\":\"${GITHUB_TOKEN}\",\"role\":\"tf-github-actions-role-plan\"}" \
-          "${{ vars.VAULT_ADDR }}/v1/auth/jwt/login" | jq -r .auth.client_token)
+        echo "🏛️ DEBUG: Exchanging GitHub token for Vault token..."
+        VAULT_URL="${{ vars.VAULT_ADDR }}/v1/auth/jwt/login"
+        ROLE_NAME="tf-github-actions-role-plan"
+        echo "📍 DEBUG: Vault URL: $VAULT_URL"
+        echo "📍 DEBUG: Role: $ROLE_NAME"
         
+        VAULT_RESPONSE=$(curl -s -X POST \
+          -H "Content-Type: application/json" \
+          -d "{\"jwt\":\"${GITHUB_TOKEN}\",\"role\":\"${ROLE_NAME}\"}" \
+          "$VAULT_URL")
+        
+        echo "📋 DEBUG: Vault response received (length: ${#VAULT_RESPONSE})"
+        echo "🔍 DEBUG: Vault response: $VAULT_RESPONSE"
+        
+        VAULT_TOKEN=$(echo "$VAULT_RESPONSE" | jq -r .auth.client_token)
+        
+        if [ "$VAULT_TOKEN" = "null" ] || [ -z "$VAULT_TOKEN" ]; then
+          echo "❌ ERROR: Failed to get Vault token"
+          echo "Vault response: $VAULT_RESPONSE"
+          exit 1
+        fi
+        
+        echo "✅ DEBUG: Vault token obtained (length: ${#VAULT_TOKEN})"
         echo "vault-token=${VAULT_TOKEN}" >> $GITHUB_OUTPUT
         echo "::add-mask::${VAULT_TOKEN}"
+        echo "🎉 DEBUG: Vault OIDC authentication completed successfully"
     
     - name: Terraform Format Check
       run: |

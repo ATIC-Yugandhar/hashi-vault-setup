@@ -37,7 +37,7 @@ resource "aws_iam_policy" "github_actions_terraform" {
         Action = [
           # EC2 permissions
           "ec2:*",
-          # VPC permissions
+          # VPC permissions (these are included in ec2:* but listed for clarity)
           "ec2:DescribeVpcs",
           "ec2:DescribeSubnets",
           "ec2:DescribeSecurityGroups",
@@ -83,10 +83,37 @@ resource "aws_iam_policy" "github_actions_terraform" {
           "iam:AddRoleToInstanceProfile",
           "iam:TagRole",
           "iam:TagInstanceProfile",
+          # DynamoDB permissions for state locking
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:DescribeTable",
           # STS permissions
           "sts:GetCallerIdentity"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket",
+          "s3:GetBucketVersioning",
+          "s3:GetBucketLocation"
+        ]
+        Resource = [
+          "arn:aws:s3:::yreddy-tf-state"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ]
+        Resource = [
+          "arn:aws:s3:::yreddy-tf-state/*"
+        ]
       }
     ]
   })

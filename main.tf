@@ -16,6 +16,16 @@ terraform {
   # Minimum Terraform version required
   required_version = ">= 1.0"
 
+  # Backend configuration for remote state storage
+  # Same configuration used for both local development and GitHub Actions
+  backend "s3" {
+    bucket  = "yreddy-tf-state"
+    key     = "vault-dev/terraform.tfstate"
+    region  = "us-east-1"
+    encrypt = true
+    # dynamodb_table = "terraform-state-lock"  # Commented out until table is created
+  }
+
   # Required provider versions and sources
   required_providers {
     # AWS provider for cloud infrastructure

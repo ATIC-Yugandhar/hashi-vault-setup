@@ -39,16 +39,28 @@ terraform apply -target=vault_policy.github-actions-oidc \
 
 #### Repository Variables (Settings → Secrets and Variables → Actions):
 ```
-VAULT_ADDR = https://your-vault-domain.com
-AWS_REGION = us-west-2
-VAULT_DOMAIN = your-vault-domain.com
+VAULT_ADDR = https://vault.hnytechs.com
+AWS_REGION = us-east-1
+VAULT_DOMAIN = vault.hnytechs.com
 ```
+
+**Note**: The GitHub Actions workflows automatically set:
+- `github_organization` from `${{ github.repository_owner }}`  
+- `github_repository` from `${{ github.event.repository.name }}`
+- `vault_server_url` from `VAULT_ADDR` variable
 
 #### Repository Secrets:
 ```
 AWS_ROLE_ARN = arn:aws:iam::account:role/github-actions-role
 ROUTE53_ZONE_ID = Z1234567890
 MY_IP = 1.2.3.4/32
+```
+
+#### Environment Secrets (for both tf-plan-dev and tf-apply-dev environments):
+```
+TF_STATE_BUCKET = yreddy-tf-state
+TF_STATE_KEY = vault-dev/terraform.tfstate
+TF_STATE_LOCK_TABLE = terraform-state-lock
 ```
 
 #### Create Environments:

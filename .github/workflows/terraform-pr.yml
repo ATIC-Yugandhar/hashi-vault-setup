@@ -95,6 +95,9 @@ jobs:
         TF_VAR_vault_domain: ${{ vars.VAULT_DOMAIN }}
         TF_VAR_route53_zone_id: ${{ secrets.ROUTE53_ZONE_ID }}
         TF_VAR_my_ip: ${{ secrets.MY_IP }}
+        TF_VAR_github_organization: ${{ github.repository_owner }}
+        TF_VAR_github_repository: ${{ github.event.repository.name }}
+        TF_VAR_vault_server_url: ${{ vars.VAULT_ADDR }}
       continue-on-error: true
     
     - name: Comment PR with Plan

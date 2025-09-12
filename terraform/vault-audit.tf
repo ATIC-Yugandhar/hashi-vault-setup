@@ -15,11 +15,11 @@ resource "vault_audit" "file_audit" {
     # Log all requests and responses (including sensitive data in dev)
     log_raw = "true"
     # HMAC sensitive values in production, but disable for dev visibility
-    hmac_accessor     = "false"
+    hmac_accessor = "false"
     # Format as JSON for easier parsing
-    format           = "json"
+    format = "json"
     # Enable prefix for easier log identification
-    prefix           = "vault_audit"
+    prefix = "vault_audit"
   }
 
   depends_on = [vault_jwt_auth_backend.github_actions]

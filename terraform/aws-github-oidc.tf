@@ -75,6 +75,8 @@ resource "aws_iam_policy" "github_actions_terraform" {
           # IAM permissions (limited)
           "iam:GetRole",
           "iam:GetRolePolicy",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
           "iam:GetInstanceProfile",
           "iam:GetPolicy",
           "iam:GetPolicyVersion",

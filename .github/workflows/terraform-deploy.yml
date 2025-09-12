@@ -17,7 +17,7 @@ jobs:
   terraform-deploy:
     name: Terraform Deploy
     runs-on: ubuntu-latest
-    environment: tf-apply-dev  # Use environment protection rules
+    environment: tf-apply-${{ vars.ENVIRONMENT || 'dev' }}  # Use environment protection rules
     
     steps:
     - name: Checkout code
@@ -77,7 +77,9 @@ jobs:
         # Exchange for Vault token using apply role
         echo "🏛️ DEBUG: Exchanging GitHub token for Vault token..."
         VAULT_URL="${{ vars.VAULT_ADDR }}/v1/auth/jwt/login"
-        ROLE_NAME="tf-github-actions-role-apply"
+        ENV_NAME=${{ vars.ENVIRONMENT || 'dev' }}
+        ROLE_NAME="tf-github-actions-role-apply-${ENV_NAME}"
+        echo "📍 DEBUG: Environment: $ENV_NAME"
         echo "📍 DEBUG: Vault URL: $VAULT_URL"
         echo "📍 DEBUG: Role: $ROLE_NAME"
         

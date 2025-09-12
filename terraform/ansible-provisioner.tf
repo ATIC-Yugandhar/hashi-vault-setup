@@ -16,14 +16,22 @@ resource "null_resource" "ansible_provisioner" {
 
   # Wait for SSH to be ready before running Ansible
   provisioner "remote-exec" {
-    inline = ["echo 'SSH connection established, instance ready for Ansible'"]
+    inline = [
+      "echo 'SSH connection established, instance ready for Ansible'",
+      "sudo cloud-init status --wait || true", # Wait for cloud-init to complete
+      "echo 'Cloud-init completed, instance fully ready'"
+    ]
 
     connection {
       type        = "ssh"
       host        = aws_instance.vault.public_ip
       user        = "ubuntu"
       private_key = tls_private_key.ssh_key.private_key_pem
-      timeout     = "5m"
+      timeout     = "10m" # Increased timeout
+
+      # Connection retry settings
+      agent    = false
+      host_key = null
     }
   }
 
@@ -36,13 +44,27 @@ resource "null_resource" "ansible_provisioner" {
       echo "Target IP: ${aws_instance.vault.public_ip}"
       echo "Domain: ${var.vault_domain}"
       
-      # Run Ansible playbook with dynamic inventory
+      # Detect if running in GitHub Actions
+      if [ -n "$GITHUB_ACTIONS" ] && [ -n "$ACTIONS_ID_TOKEN" ]; then
+        echo "🔐 GitHub Actions detected - enabling JWT authentication"
+        EXTRA_VARS="vault_use_jwt_auth=true vault_jwt_role=tf-github-actions-role-apply-${var.environment}"
+        echo "🎭 Using JWT role: tf-github-actions-role-apply-${var.environment}"
+      else
+        echo "🔑 Local environment detected - using root token"
+        EXTRA_VARS="vault_use_jwt_auth=false"
+      fi
+      
+      # Run Ansible playbook with dynamic inventory and environment-specific variables
       cd ${path.module}/../ansible
-      ansible-playbook -i dynamic_inventory.py vault-setup.yml
+      ansible-playbook -i dynamic_inventory.py vault-setup.yml --extra-vars "$EXTRA_VARS"
       
       echo "✅ Ansible provisioning completed successfully"
       echo "🌐 Vault URL: https://${var.vault_domain}"
-      echo "🔑 Root Token: vault-dev-root-token"
+      if [ -n "$GITHUB_ACTIONS" ]; then
+        echo "🔐 Authentication: JWT (GitHub Actions OIDC)"
+      else
+        echo "🔑 Root Token: vault-dev-root-token"
+      fi
     EOT
 
     # Set working directory

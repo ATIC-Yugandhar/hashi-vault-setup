@@ -55,13 +55,14 @@ resource "aws_security_group" "vault_sg" {
   name_prefix = "vault-sg"
   vpc_id      = aws_vpc.vault_vpc.id
 
-  # SSH access from your IP only
+  # SSH access - TEMPORARY: Open to internet for GitHub Actions testing
+  # TODO: Restrict this back to specific IPs after testing
   ingress {
-    description = "SSH"
+    description = "SSH - OPEN FOR TESTING"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
+    cidr_blocks = ["0.0.0.0/0"] # TEMPORARY: Open to internet
   }
 
   # Vault HTTP access from your IP only (for dev mode)

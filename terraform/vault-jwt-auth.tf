@@ -54,7 +54,7 @@ resource "vault_jwt_auth_backend_role" "github_actions" {
 
   # Token configuration - 15 minute TTL
   token_ttl     = 600 # 10 minutes
-  token_max_ttl = 600 # 10 minutes maximum
+  token_max_ttl = 900 # 15 minutes maximum
 
   # JWT role configuration based on actual GitHub OIDC token structure
   user_claim = "actor"

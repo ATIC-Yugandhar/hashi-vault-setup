@@ -1,0 +1,124 @@
+# =============================================================================
+# TERRAFORM GITIGNORE
+# =============================================================================
+# Prevents sensitive information from being committed to version control
+# =============================================================================
+
+# =============================================================================
+# TERRAFORM STATE FILES (CRITICAL - Contains sensitive data)
+# =============================================================================
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform.lock.hcl
+.terraform/
+terraform.tfvars
+
+# =============================================================================
+# SSH KEYS AND CERTIFICATES (CRITICAL - Private keys)
+# =============================================================================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+vault-ssh-key*
+ssh-key*
+*private*key*
+
+# =============================================================================
+# AWS CREDENTIALS AND SENSITIVE FILES
+# =============================================================================
+.aws/
+aws-credentials
+credentials
+.env
+.env.local
+.env.production
+.env.staging
+secrets.json
+config.json
+
+# =============================================================================
+# TERRAFORM PLANS AND LOGS
+# =============================================================================
+*.tfplan
+*.tfplan.*
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+crash.log
+crash.*.log
+*.log
+
+# =============================================================================
+# BACKUP AND TEMPORARY FILES
+# =============================================================================
+*.backup
+*.tmp
+*.temp
+*~
+.#*
+#*#
+*.swp
+*.swo
+*_backup
+backup_*
+
+# =============================================================================
+# OS AND IDE FILES
+# =============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# =============================================================================
+# CERTIFICATES AND PKI
+# =============================================================================
+*.csr
+*.der
+*.p7b
+*.p7s
+*.cer
+ca-key.pem
+ca.pem
+cert.pem
+key.pem
+
+# =============================================================================
+# VAULT SPECIFIC
+# =============================================================================
+vault.log
+vault-audit.log
+.vault-token
+
+# =============================================================================
+# TERRAFORM + ANSIBLE AUTOMATION FILES
+# =============================================================================
+SETUP_COMPLETE.md
+ansible/inventory.ini
+
+# =============================================================================
+# DOCUMENTATION BUILDS (if using doc generators)
+# =============================================================================
+docs/_build/
+site/

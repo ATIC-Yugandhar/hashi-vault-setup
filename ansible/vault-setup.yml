@@ -1,0 +1,220 @@
+---
+- name: Setup HashiCorp Vault with HTTPS
+  hosts: vault_servers
+  become: yes
+  vars:
+    vault_version_var: "{{ vault_version | default('1.15.6') }}"
+    vault_domain_var: "{{ vault_domain | default('vault.example.com') }}"
+    vault_root_token_var: "{{ vault_root_token | default('vault-dev-root-token') }}"
+    
+  tasks:
+    - name: Update package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+        
+    - name: Install required packages
+      apt:
+        name:
+          - unzip
+          - curl
+          - jq
+          - snapd
+          - nginx
+        state: present
+        
+    - name: Create vault user
+      user:
+        name: vault
+        system: yes
+        home: /etc/vault
+        shell: /bin/false
+        create_home: no
+        
+    - name: Create vault directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: vault
+        group: vault
+        mode: '0755'
+      loop:
+        - /opt/vault/data
+        - /etc/vault/tls
+        - /var/log/vault
+        
+    - name: Download and install Vault binary
+      block:
+        - name: Download Vault
+          get_url:
+            url: "https://releases.hashicorp.com/vault/{{ vault_version_var }}/vault_{{ vault_version_var }}_linux_amd64.zip"
+            dest: /tmp/vault.zip
+            mode: '0644'
+            
+        - name: Extract Vault binary
+          unarchive:
+            src: /tmp/vault.zip
+            dest: /tmp/
+            remote_src: yes
+            
+        - name: Install Vault binary
+          copy:
+            src: /tmp/vault
+            dest: /usr/local/bin/vault
+            mode: '0755'
+            owner: root
+            group: root
+            remote_src: yes
+            
+        - name: Clean up download
+          file:
+            path: /tmp/vault.zip
+            state: absent
+            
+    - name: Create Vault systemd service
+      copy:
+        dest: /etc/systemd/system/vault.service
+        content: |
+          [Unit]
+          Description=HashiCorp Vault (Development Mode)
+          After=network-online.target
+          
+          [Service]
+          Type=simple
+          User=vault
+          Group=vault
+          ExecStart=/usr/local/bin/vault server -dev -dev-listen-address=127.0.0.1:8200 -dev-root-token-id={{ vault_root_token_var }}
+          Restart=on-failure
+          LimitNOFILE=65536
+          LimitMEMLOCK=infinity
+          
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+        
+    - name: Start and enable Vault service
+      systemd:
+        name: vault
+        daemon_reload: yes
+        enabled: yes
+        state: started
+        
+    - name: Install Certbot via snap
+      block:
+        - name: Install core snap
+          snap:
+            name: core
+            
+        - name: Refresh core snap
+          command: snap refresh core
+          
+        - name: Install certbot snap
+          snap:
+            name: certbot
+            classic: yes
+            
+        - name: Create certbot symlink
+          file:
+            src: /snap/bin/certbot
+            dest: /usr/bin/certbot
+            state: link
+            
+    - name: Configure NGINX for HTTP only (pre-certificate)
+      copy:
+        dest: /etc/nginx/sites-available/vault
+        content: |
+          server {
+              listen 80;
+              server_name {{ vault_domain_var }};
+              
+              # Let's Encrypt challenge
+              location /.well-known/acme-challenge/ { 
+                  root /var/www/html; 
+              }
+              
+              # Proxy to Vault for now
+              location / {
+                  proxy_pass http://127.0.0.1:8200;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+              }
+          }
+        mode: '0644'
+        
+    - name: Enable NGINX site
+      file:
+        src: /etc/nginx/sites-available/vault
+        dest: /etc/nginx/sites-enabled/vault
+        state: link
+        
+    - name: Remove default NGINX site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+        
+    - name: Test NGINX configuration
+      command: nginx -t
+      
+    - name: Start and enable NGINX
+      systemd:
+        name: nginx
+        enabled: yes
+        state: started
+        
+    - name: Create webroot directory
+      file:
+        path: /var/www/html
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+        
+    - name: Obtain Let's Encrypt certificate
+      command: >
+        certbot certonly --webroot --webroot-path /var/www/html
+        --email admin@{{ vault_domain_var }} --agree-tos --no-eff-email
+        --domains {{ vault_domain_var }} --non-interactive
+      register: certbot_result
+      failed_when: false
+      
+    - name: Configure NGINX with SSL certificate
+      block:
+        - name: Apply SSL configuration to NGINX
+          command: certbot --nginx --domains {{ vault_domain_var }} --non-interactive
+          
+        - name: Setup automatic certificate renewal
+          cron:
+            name: "Certbot renewal"
+            minute: "0"
+            hour: "12"
+            job: "/usr/bin/certbot renew --quiet && systemctl reload nginx"
+            
+        - name: Reload NGINX with SSL configuration
+          systemd:
+            name: nginx
+            state: reloaded
+            
+      when: certbot_result.rc == 0
+      
+    - name: Display setup results
+      debug:
+        msg: |
+          ===================================
+          Vault Setup Complete!
+          ===================================
+          {% if certbot_result.rc == 0 %}
+          ✅ HTTPS URL: https://{{ vault_domain_var }}
+          ✅ Let's Encrypt certificate obtained
+          ✅ Automatic renewal configured
+          {% else %}
+          ⚠️  Certificate failed, using HTTP fallback
+          🔗 HTTP URL: http://{{ vault_domain_var }}:8200
+          {% endif %}
+          🔑 Root Token: {{ vault_root_token_var }}
+          🔧 SSH: ssh -i ../vault-ssh-key.pem ubuntu@{{ ansible_host }}
+          ===================================

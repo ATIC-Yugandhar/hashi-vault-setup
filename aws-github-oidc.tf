@@ -10,17 +10,17 @@
 # Create AWS IAM OIDC provider for GitHub Actions
 resource "aws_iam_openid_connect_provider" "github_actions" {
   url = "https://token.actions.githubusercontent.com"
-  
+
   client_id_list = [
     "sts.amazonaws.com"
   ]
-  
+
   # GitHub's OIDC provider thumbprints
   thumbprint_list = [
     "6938fd4d98bab03faadb97b34396831e3780aea1",
     "1c58a3a8518e8759bf075b76b750d4f2df264fcd"
   ]
-  
+
   tags = var.tags
 }
 
@@ -28,7 +28,7 @@ resource "aws_iam_openid_connect_provider" "github_actions" {
 resource "aws_iam_policy" "github_actions_terraform" {
   name        = "GitHubActions-Terraform-Policy"
   description = "Policy for GitHub Actions to perform Terraform operations"
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -90,14 +90,14 @@ resource "aws_iam_policy" "github_actions_terraform" {
       }
     ]
   })
-  
+
   tags = var.tags
 }
 
 # Create IAM role for GitHub Actions
 resource "aws_iam_role" "github_actions" {
   name = "GitHubActions-Terraform-Role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -120,7 +120,7 @@ resource "aws_iam_role" "github_actions" {
       }
     ]
   })
-  
+
   tags = var.tags
 }
 

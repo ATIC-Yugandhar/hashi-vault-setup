@@ -8,16 +8,16 @@
 resource "null_resource" "ansible_provisioner" {
   # Trigger re-provisioning if any of these change
   triggers = {
-    instance_id     = aws_instance.vault.id
-    instance_ip     = aws_instance.vault.public_ip
-    vault_domain    = var.vault_domain
+    instance_id           = aws_instance.vault.id
+    instance_ip           = aws_instance.vault.public_ip
+    vault_domain          = var.vault_domain
     ansible_playbook_hash = filemd5("${path.module}/ansible/vault-setup.yml")
   }
 
   # Wait for SSH to be ready before running Ansible
   provisioner "remote-exec" {
     inline = ["echo 'SSH connection established, instance ready for Ansible'"]
-    
+
     connection {
       type        = "ssh"
       host        = aws_instance.vault.public_ip
@@ -44,10 +44,10 @@ resource "null_resource" "ansible_provisioner" {
       echo "🌐 Vault URL: https://${var.vault_domain}"
       echo "🔑 Root Token: vault-dev-root-token"
     EOT
-    
+
     # Set working directory
     working_dir = path.module
-    
+
     # Environment variables for Ansible
     environment = {
       ANSIBLE_HOST_KEY_CHECKING = "False"
@@ -73,7 +73,7 @@ resource "null_resource" "ansible_provisioner" {
 # Create a simple completion marker
 resource "local_file" "setup_complete" {
   depends_on = [null_resource.ansible_provisioner]
-  
+
   content = <<-EOT
 # Vault Setup Complete
 Deployment completed at: ${timestamp()}

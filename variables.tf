@@ -39,7 +39,7 @@ variable "aws_region" {
   description = "AWS region to deploy resources in (affects latency and compliance)"
   type        = string
   default     = "us-west-2"
-  
+
   validation {
     condition     = can(regex("^[a-z]{2}-[a-z]+-[0-9]+$", var.aws_region))
     error_message = "AWS region must be in standard format (e.g., us-west-2, eu-west-1)."
@@ -55,7 +55,7 @@ variable "aws_region" {
 variable "vault_domain" {
   description = "Fully qualified domain name for Vault access (e.g., vault.example.com)"
   type        = string
-  
+
   validation {
     condition     = can(regex("^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$", var.vault_domain))
     error_message = "Domain name must be a valid FQDN format."
@@ -67,7 +67,7 @@ variable "vault_domain" {
 variable "route53_zone_id" {
   description = "Route53 hosted zone ID for DNS record creation (must own the domain)"
   type        = string
-  
+
   validation {
     condition     = can(regex("^Z[A-Z0-9]+$", var.route53_zone_id))
     error_message = "Route53 zone ID must start with 'Z' followed by alphanumeric characters."
@@ -83,9 +83,9 @@ variable "route53_zone_id" {
 variable "my_ip" {
   description = "Your public IP address in CIDR format (e.g., 203.0.113.42/32) - RESTRICTS ACCESS TO VAULT"
   type        = string
-  
+
   validation {
-    condition = can(regex("^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(?:3[0-2]|[12]?[0-9])$", var.my_ip))
+    condition     = can(regex("^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)/(?:3[0-2]|[12]?[0-9])$", var.my_ip))
     error_message = "IP must be in valid CIDR format (e.g., 203.0.113.42/32)."
   }
 }
@@ -100,7 +100,7 @@ variable "ami_id" {
   description = "EC2 AMI ID to use (optional - will auto-select latest Ubuntu 22.04 if empty)"
   type        = string
   default     = ""
-  
+
   validation {
     condition     = var.ami_id == "" || can(regex("^ami-[a-f0-9]{8,17}$", var.ami_id))
     error_message = "AMI ID must be empty or in format ami-xxxxxxxx."
@@ -113,7 +113,7 @@ variable "instance_type" {
   description = "EC2 instance type (t3.micro is sufficient for development)"
   type        = string
   default     = "t3.micro"
-  
+
   validation {
     condition     = can(regex("^[a-z][0-9][a-z]?\\.(nano|micro|small|medium|large|xlarge|[0-9]+xlarge)$", var.instance_type))
     error_message = "Instance type must be valid EC2 format (e.g., t3.micro, m5.large)."
@@ -129,8 +129,8 @@ variable "instance_type" {
 variable "vault_version" {
   description = "HashiCorp Vault version to install (use specific version for stability)"
   type        = string
-  default     = "1.15.6"  # Updated to match current working version
-  
+  default     = "1.15.6" # Updated to match current working version
+
   validation {
     condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z0-9]+)?$", var.vault_version))
     error_message = "Vault version must be in semantic version format (e.g., 1.15.2)."
@@ -146,7 +146,7 @@ variable "environment" {
   description = "Environment name (affects resource naming and tagging)"
   type        = string
   default     = "dev"
-  
+
   validation {
     condition     = contains(["dev", "staging", "prod", "test"], var.environment)
     error_message = "Environment must be one of: dev, staging, prod, test."
@@ -181,7 +181,7 @@ variable "tags" {
     Owner       = "development-team"
     Purpose     = "vault-development"
   }
-  
+
   validation {
     condition     = contains(keys(var.tags), "Project") && contains(keys(var.tags), "Environment")
     error_message = "Tags must include 'Project' and 'Environment' keys."

@@ -85,7 +85,7 @@ output "ssh_key_instructions" {
     chmod 600 temp-key.pem
     ssh -i temp-key.pem ubuntu@${aws_instance.vault.public_ip}
     EOT
-  ) : (
+    ) : (
     <<-EOT
     SSH Key Locations:
     
@@ -100,7 +100,7 @@ output "ssh_key_instructions" {
 
 output "vault_login_instructions" {
   description = "Instructions to login to Vault"
-  value = <<-EOT
+  value       = <<-EOT
     CLI Login:
     export VAULT_ADDR=https://${var.vault_domain}
     export VAULT_TOKEN=vault-dev-root-token

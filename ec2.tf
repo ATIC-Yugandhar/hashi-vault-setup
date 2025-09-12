@@ -35,7 +35,7 @@ resource "aws_iam_policy" "vault_ssm_policy" {
         Resource = concat([
           aws_ssm_parameter.vault_cert.arn,
           aws_ssm_parameter.vault_key.arn
-        ], var.store_ssh_key_in_ssm ? [
+          ], var.store_ssh_key_in_ssm ? [
           aws_ssm_parameter.ssh_private_key[0].arn,
           aws_ssm_parameter.ssh_public_key[0].arn
         ] : [])

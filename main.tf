@@ -15,7 +15,7 @@
 terraform {
   # Minimum Terraform version required
   required_version = ">= 1.0"
-  
+
   # Required provider versions and sources
   required_providers {
     # AWS provider for cloud infrastructure
@@ -43,7 +43,7 @@ terraform {
 # Configure the AWS Provider
 provider "aws" {
   region = var.aws_region
-  
+
   # Default tags applied to all resources
   default_tags {
     tags = {
@@ -63,7 +63,7 @@ provider "aws" {
 resource "tls_private_key" "vault_ca" {
   algorithm = "RSA"
   rsa_bits  = 2048
-  
+
   # Lifecycle rule to prevent accidental key regeneration
   lifecycle {
     create_before_destroy = true
@@ -84,12 +84,12 @@ resource "tls_self_signed_cert" "vault_cert" {
   # DNS names this certificate is valid for
   dns_names = [
     var.vault_domain,
-    "localhost"  # For local testing
+    "localhost" # For local testing
   ]
 
   # IP addresses this certificate is valid for
   ip_addresses = [
-    "127.0.0.1"  # Localhost/loopback
+    "127.0.0.1" # Localhost/loopback
   ]
 
   # Certificate validity: 1 year (8760 hours)
@@ -98,11 +98,11 @@ resource "tls_self_signed_cert" "vault_cert" {
 
   # Certificate key usage - standard server authentication uses
   allowed_uses = [
-    "key_encipherment",   # Encrypt symmetric keys
-    "digital_signature",  # Digital signatures
-    "server_auth",        # TLS server authentication
+    "key_encipherment",  # Encrypt symmetric keys
+    "digital_signature", # Digital signatures
+    "server_auth",       # TLS server authentication
   ]
-  
+
   lifecycle {
     create_before_destroy = true
   }
@@ -121,7 +121,7 @@ resource "aws_ssm_parameter" "vault_cert" {
   type        = "SecureString"
   value       = tls_self_signed_cert.vault_cert.cert_pem
   description = "Vault TLS certificate for HTTPS endpoint"
-  
+
   tags = var.tags
 }
 
@@ -132,7 +132,7 @@ resource "aws_ssm_parameter" "vault_key" {
   type        = "SecureString"
   value       = tls_private_key.vault_ca.private_key_pem
   description = "Vault TLS private key - HIGHLY SENSITIVE"
-  
+
   tags = var.tags
 }
 
@@ -144,8 +144,8 @@ resource "aws_ssm_parameter" "vault_key" {
 
 resource "tls_private_key" "ssh_key" {
   algorithm = "RSA"
-  rsa_bits  = 4096  # Enhanced security: 4096-bit key
-  
+  rsa_bits  = 4096 # Enhanced security: 4096-bit key
+
   lifecycle {
     create_before_destroy = true
   }
@@ -157,7 +157,7 @@ resource "tls_private_key" "ssh_key" {
 resource "local_file" "ssh_private_key" {
   content         = tls_private_key.ssh_key.private_key_pem
   filename        = "${path.module}/vault-ssh-key.pem"
-  file_permission = "0600"  # Owner read/write only for security
+  file_permission = "0600" # Owner read/write only for security
 }
 
 # Save SSH public key to local file
@@ -165,7 +165,7 @@ resource "local_file" "ssh_private_key" {
 resource "local_file" "ssh_public_key" {
   content         = tls_private_key.ssh_key.public_key_openssh
   filename        = "${path.module}/vault-ssh-key.pub"
-  file_permission = "0644"  # Standard read permissions for public key
+  file_permission = "0644" # Standard read permissions for public key
 }
 
 # Optionally store SSH keys in Parameter Store for centralized management
@@ -179,7 +179,7 @@ resource "aws_ssm_parameter" "ssh_private_key" {
   type        = "SecureString"
   value       = tls_private_key.ssh_key.private_key_pem
   description = "SSH private key for Vault EC2 instance - HIGHLY SENSITIVE"
-  
+
   tags = var.tags
 }
 
@@ -187,9 +187,9 @@ resource "aws_ssm_parameter" "ssh_private_key" {
 resource "aws_ssm_parameter" "ssh_public_key" {
   count       = var.store_ssh_key_in_ssm ? 1 : 0
   name        = "/vault/${var.environment}/ssh-public-key"
-  type        = "String"  # Public key doesn't need encryption
+  type        = "String" # Public key doesn't need encryption
   value       = tls_private_key.ssh_key.public_key_openssh
   description = "SSH public key for Vault EC2 instance"
-  
+
   tags = var.tags
 }

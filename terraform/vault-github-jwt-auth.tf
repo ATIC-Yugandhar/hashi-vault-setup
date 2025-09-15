@@ -9,7 +9,7 @@
 # Vault provider configuration
 provider "vault" {
   address = var.vault_server_url
-  #token   = "vault-dev-root-token"
+  token   = "vault-dev-root-token"
 
   # Skip TLS verification for dev environment with self-signed certs
   skip_tls_verify = true

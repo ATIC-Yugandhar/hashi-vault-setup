@@ -5,15 +5,6 @@
 # Supports multiple branches: main, release, development, etc.
 # =============================================================================
 
-# # Vault provider configuration
-# provider "vault" {
-#   address = var.vault_server_url
-#   token   = "vault-dev-root-token"
-
-#   # Skip TLS verification for dev environment with self-signed certs
-#   skip_tls_verify = true
-# }
-
 # Enable JWT auth method
 resource "vault_jwt_auth_backend" "gitlab_pipeline" {
   description        = "JWT auth backend for Gitlab CI/CD Pipeline"
@@ -58,7 +49,7 @@ resource "vault_jwt_auth_backend_role" "gitlabci_role" {
   # Bound claims - must match JWT claims exactly
   bound_claims = {
     project_id = "74331448",
-    ref = "main",
-    ref_type = "branch"
+    ref        = "main",
+    ref_type   = "branch"
   }
 }

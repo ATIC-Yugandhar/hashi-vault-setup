@@ -67,12 +67,12 @@ jobs:
         echo "::add-mask::${GITHUB_TOKEN}"
         
         # Debug: Decode JWT header and payload (without signature)
-        # JWT_HEADER=$(echo "$GITHUB_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | jq . || echo "Failed to decode header")
-        # JWT_PAYLOAD=$(echo "$GITHUB_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq . || echo "Failed to decode payload")
+         #JWT_HEADER=$(echo "$GITHUB_TOKEN" | cut -d. -f1 | base64 -d 2>/dev/null | jq . || echo "Failed to decode header")
+         #JWT_PAYLOAD=$(echo "$GITHUB_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq . || echo "Failed to decode payload")
         # 
-        # echo "🔍 DEBUG: JWT Token Info:"
-        # echo "  Header: $JWT_HEADER"
-        # echo "  Payload: $JWT_PAYLOAD"
+         #echo "🔍 DEBUG: JWT Token Info:"
+         #echo "  Header: $JWT_HEADER"
+         #echo "  Payload: $JWT_PAYLOAD"
         
         # Exchange for Vault token using apply role
         # echo "🏛️ DEBUG: Exchanging GitHub token for Vault token..."

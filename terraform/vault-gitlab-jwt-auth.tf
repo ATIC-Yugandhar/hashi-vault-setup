@@ -1,5 +1,5 @@
 # =============================================================================
-# VAULT JWT AUTHENTICATION FOR GITLAB ACTIONS
+# VAULT JWT AUTHENTICATION FOR GITLAB CI/CD Pipeline
 # =============================================================================
 # Configure JWT authentication in Vault to work with Gitlab CI/CD Pipleine
 # Supports multiple branches: main, release, development, etc.
@@ -12,12 +12,6 @@ provider "vault" {
 
   # Skip TLS verification for dev environment with self-signed certs
   skip_tls_verify = true
-}
-
-# Define environments to create roles for
-locals {
-  environments = ["dev", "prod"]
-  operations   = ["plan", "apply"]
 }
 
 # Enable JWT auth method
@@ -41,10 +35,10 @@ EOT
 }
 
 # Create JWT roles dynamically for each environment and operation combination
-resource "vault_jwt_auth_backend_role" "gitlab_role" {
+resource "vault_jwt_auth_backend_role" "gitlabci_role" {
 
   backend        = vault_jwt_auth_backend.gitlab_pipeline.path
-  role_name      = "gitlab-role"
+  role_name      = "gitlabci-role"
   token_policies = [vault_policy.gitlabci_policy.name]
 
   # Token configuration - 15 minute TTL

@@ -23,7 +23,7 @@ locals {
 # Enable JWT auth method
 resource "vault_jwt_auth_backend" "gitlab_pipeline" {
   description        = "JWT auth backend for Gitlab CI/CD Pipeline"
-  path               = "jwt-v2"
+  path               = "jwt-gitlab"
   oidc_discovery_url = "https://gitlab.com"
   bound_issuer       = "https://gitlab.com"
 }

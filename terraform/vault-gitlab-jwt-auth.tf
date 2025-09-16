@@ -52,4 +52,12 @@ resource "vault_jwt_auth_backend_role" "gitlabci_role" {
     ref        = "main",
     ref_type   = "branch"
   }
+  # Additional claim mappings for audit and debugging
+  claim_mappings = {
+    repository  = "project_path",
+    actor       = "user_login"
+    workflow    = "pipeline_id"
+    ref         = "ref"
+    environment = "environment"
+  }
 }

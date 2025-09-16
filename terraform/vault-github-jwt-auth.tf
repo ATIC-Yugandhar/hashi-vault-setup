@@ -9,7 +9,7 @@
 # Vault provider configuration
 provider "vault" {
   address = var.vault_server_url
-  token   = "vault-dev-root-token"
+  #token   = "vault-dev-root-token"
 
   # Skip TLS verification for dev environment with self-signed certs
   skip_tls_verify = true
@@ -53,7 +53,7 @@ resource "vault_jwt_auth_backend_role" "github_actions" {
   token_policies = [vault_policy.github_actions.name]
 
   # Token configuration - 15 minute TTL
-  token_ttl     = 900 # 15 minutes
+  token_ttl     = 600 # 10 minutes
   token_max_ttl = 900 # 15 minutes maximum
 
   # JWT role configuration based on actual GitHub OIDC token structure
